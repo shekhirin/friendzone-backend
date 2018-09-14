@@ -54,11 +54,11 @@ func loadGroups(filename string) []string {
 }
 
 func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client, users []int) {
-	//bar := pb.StartNew(len(users))
+	//C := pb.StartNew(len(users))
 	for i := 0; i < len(users); i += 25 {
 		topBound := (i + 1) * 25
-		if topBound > len(users)-1 {
-			topBound = len(users)-1
+		if topBound > len(users) {
+			topBound = len(users)
 		}
 		shrinkedUsers := getUsersGroups(vk, users[i*25:topBound])
 		go func() {
@@ -128,7 +128,7 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 
 	//bar := pb.StartNew(len(resultGroups))
 	for i, resultGroup := range resultGroups {
-		membersForRedis := make([]interface{}, 0)
+		membersForRedis := make([]interface{}, resultGroup.MembersCount)
 		for j := 0; j < resultGroup.MembersCount; j += 1000*25 {
 			var members [][]int
 
@@ -144,18 +144,22 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 			}, 0)
 			json.Unmarshal(byteArray, &members)
 
-			for _, batch := range members {
+			for k, batch := range members {
 				resultGroups[i].Members = append(resultGroups[i].Members, batch...)
-				for _, id := range batch {
-					membersForRedis = append(membersForRedis, strconv.Itoa(id))
+				for m, id := range batch {
+					membersForRedis[j*1000*25+k*1000+m] = strconv.Itoa(id)
 				}
 			}
 		}
 
 		redisKey := "public_" + strconv.Itoa(resultGroup.Id)
 		redis.Del(redisKey)
-		for k := 0; k < len(membersForRedis)-MaxRedisBatch; k += MaxRedisBatch {
-			redis.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)
+		for k := 0; k < len(resultGroups[i].Members); k += MaxRedisBatch {
+			if MaxRedisBatch > len(membersForRedis) {
+				redis.SAdd(redisKey, membersForRedis[k:]...)
+			} else {
+				redis.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)
+			}
 		}
 
 		//bar.Increment()
