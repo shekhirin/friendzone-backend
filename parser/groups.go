@@ -9,7 +9,6 @@ import (
 	"github.com/globalsign/mgo/bson"
 	"github.com/go-redis/redis"
 	"github.com/vorkytaka/easyvk-go/easyvk"
-	"gopkg.in/cheggaaa/pb.v1"
 	"io/ioutil"
 	"strconv"
 	"strings"
@@ -55,7 +54,7 @@ func loadGroups(filename string) []string {
 }
 
 func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client, users []int) {
-	bar := pb.StartNew(len(users))
+	//bar := pb.StartNew(len(users))
 	for i := 0; i < len(users); i += 25 {
 		topBound := (i + 1) * 25
 		if topBound > len(users)-1 {
@@ -101,9 +100,9 @@ func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client,
 			wg.Done()
 			<-guard
 		}()
-		bar.Add(len(shrinkedUsers))
+		//bar.Add(len(shrinkedUsers))
 	}
-	bar.Finish()
+	//bar.Finish()
 }
 
 func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Group {
@@ -127,7 +126,7 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 		}
 	}
 
-	bar := pb.StartNew(len(resultGroups))
+	//bar := pb.StartNew(len(resultGroups))
 	for i, resultGroup := range resultGroups {
 		membersForRedis := make([]interface{}, 0)
 		for j := 0; j < resultGroup.MembersCount; j += 1000*25 {
@@ -159,9 +158,9 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 			redis.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)
 		}
 
-		bar.Increment()
+		//bar.Increment()
 	}
-	bar.Finish()
+	//bar.Finish()
 
 	return resultGroups
 }

@@ -15,6 +15,7 @@ func vkRequestWrapper(vk *easyvk.VK, method string, params map[string]string, re
 		if retriesCount > 3 {
 			panic(err)
 		}
+		fmt.Println(err.Error())
 		vkRequestWrapper(vk, method, params, retriesCount+1)
 	}
 	return res
