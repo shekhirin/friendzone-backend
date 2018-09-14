@@ -1,5 +1,3 @@
-export GOBIN=$WORKSPACE/bin
-
 dep ensure
 go install friendzone-backend/parser/
 
