@@ -5,6 +5,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/vorkytaka/easyvk-go/easyvk"
 	"os"
+	"sync"
 	"time"
 )
 
@@ -27,6 +28,7 @@ type Group struct {
 
 var RPSLimiter = time.Tick(time.Second / VkRPS)
 var guard chan struct{}
+var wg sync.WaitGroup
 
 func main() {
 	vk := easyvk.WithToken(os.Getenv("VK_TOKEN"))
@@ -44,6 +46,7 @@ func main() {
 	})
 
 	guard = make(chan struct{}, MaxGoroutines)
+	wg = sync.WaitGroup{}
 
 	parseUsersGroups(&vk, collection, redisClient)
 

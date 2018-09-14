@@ -13,14 +13,10 @@ import (
 	"io/ioutil"
 	"strconv"
 	"strings"
-	"sync"
 )
 
-var wg sync.WaitGroup
 
 func parseUsersGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client) {
-	wg = sync.WaitGroup{}
-
 	for {
 		fmt.Println("Loading groups list... ")
 		groupsList := loadGroups("groups.txt")
