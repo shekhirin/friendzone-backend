@@ -31,7 +31,7 @@ var guard chan struct{}
 func main() {
 	vk := easyvk.WithToken(os.Getenv("VK_TOKEN"))
 
-	mongo, err := mgo.Dial(os.Getenv("REDIS_URL"))
+	mongo, err := mgo.Dial("127.0.0.1")
 	if err != nil {
 		panic(err)
 	}
