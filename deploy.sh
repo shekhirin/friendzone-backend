@@ -1,4 +1,3 @@
-export WORKSPACE=$(pwd)
 export GOBIN=$WORKSPACE/bin
 
 dep ensure
