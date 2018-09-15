@@ -10,6 +10,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/vorkytaka/easyvk-go/easyvk"
 	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 )
@@ -18,7 +19,7 @@ import (
 func parseUsersGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client) {
 	for {
 		fmt.Println("Loading groups list... ")
-		groupsList := loadGroups("groups.txt")
+		groupsList := loadGroups(os.Getenv("GROUPS_FILE"))
 
 		fmt.Println("Parsing groups' members...")
 		groups := getGroupsMembers(vk, redis, groupsList)
@@ -56,11 +57,13 @@ func loadGroups(filename string) []string {
 func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client, users []int) {
 	//C := pb.StartNew(len(users))
 	for i := 0; i < len(users); i += 25 {
+		var shrinkedUsers []User
 		topBound := (i + 1) * 25
 		if topBound > len(users) {
-			topBound = len(users)
+			shrinkedUsers = getUsersGroups(vk, users[i*25:])
+		} else {
+			shrinkedUsers = getUsersGroups(vk, users[i*25:topBound])
 		}
-		shrinkedUsers := getUsersGroups(vk, users[i*25:topBound])
 		go func() {
 			guard <- struct{}{}
 			wg.Add(1)
@@ -121,7 +124,7 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 			resultGroups = append(resultGroups, Group{
 				Id:           int(groupData["id"].(float64)),
 				MembersCount: int(groupData["members_count"].(float64)),
-				Members:      make([]int, 0),
+				Members:      make([]int, int(groupData["members_count"].(float64))),
 			})
 		}
 	}
@@ -140,14 +143,13 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 					"	members.push(API.groups.getMembers({\"group_id\": %s, \"count\": 1000, \"offset\": i*1000}).items);\n"+ // TODO: Add last_seen checking
 					"	i = i + 1;\n"+
 					"}\n"+
-					"return members;", strconv.Itoa(j*25), strconv.Itoa(resultGroup.Id)),
+					"return members;", strconv.Itoa(j/1000), strconv.Itoa(resultGroup.Id)),
 			}, 0)
 			json.Unmarshal(byteArray, &members)
-
 			for k, batch := range members {
-				resultGroups[i].Members = append(resultGroups[i].Members, batch...)
 				for m, id := range batch {
-					membersForRedis[j*1000*25+k*1000+m] = strconv.Itoa(id)
+					resultGroups[i].Members[j+k*1000+m] = id
+					membersForRedis[j+k*1000+m] = strconv.Itoa(id)
 				}
 			}
 		}
@@ -155,7 +157,7 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 		redisKey := "public_" + strconv.Itoa(resultGroup.Id)
 		redis.Del(redisKey)
 		for k := 0; k < len(resultGroups[i].Members); k += MaxRedisBatch {
-			if MaxRedisBatch > len(membersForRedis) {
+			if k+MaxRedisBatch > len(membersForRedis) {
 				redis.SAdd(redisKey, membersForRedis[k:]...)
 			} else {
 				redis.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)

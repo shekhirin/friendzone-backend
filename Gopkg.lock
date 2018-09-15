@@ -33,14 +33,6 @@
   version = "v6.14.1"
 
 [[projects]]
-  digest = "1:cdb899c199f907ac9fb50495ec71212c95cb5b0e0a8ee0800da0238036091033"
-  name = "github.com/mattn/go-runewidth"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "ce7b0b5c7b45a81508558cd1dba6bb1e4ddb51bb"
-  version = "v0.0.3"
-
-[[projects]]
   digest = "1:187527d8e00748764a76647a474cccf6b1245dbeb65211fde17b677a7b817b76"
   name = "github.com/vorkytaka/easyvk-go"
   packages = ["easyvk"]
@@ -59,22 +51,6 @@
   pruneopts = "UT"
   revision = "161cd47e91fd58ac17490ef4d742dc98bb4cf60e"
 
-[[projects]]
-  branch = "master"
-  digest = "1:6eb2645d74b43d9c87b51947df39f7c668a4f422cd512053f7f6f75bfaad0197"
-  name = "golang.org/x/sys"
-  packages = ["unix"]
-  pruneopts = "UT"
-  revision = "917fdcba135dcbaccd57425db91723541b4427c8"
-
-[[projects]]
-  digest = "1:d8cd4f14785b5ae65100524a29ebba8b9dfc5401020fe7504f80b438bb8e8e0d"
-  name = "gopkg.in/cheggaaa/pb.v1"
-  packages = ["."]
-  pruneopts = "UT"
-  revision = "2af8bbdea9e99e83b3ac400d8f6b6d1b8cbbf338"
-  version = "v1.0.25"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
@@ -83,7 +59,6 @@
     "github.com/globalsign/mgo/bson",
     "github.com/go-redis/redis",
     "github.com/vorkytaka/easyvk-go/easyvk",
-    "gopkg.in/cheggaaa/pb.v1",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
