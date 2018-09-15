@@ -1,5 +1,3 @@
-// FIXME: Use only make or only empty slice with append()
-// FIXME: id = string or int (ONE TYPE WITHOUT A LOT OF CASTS)
 package main
 
 import (
@@ -13,16 +11,26 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
+var vk *easyvk.VK
+var mongoGroups *mgo.Collection
+var mongoUsers *mgo.Collection
+var redisVk *redis.Client
 
-func parseUsersGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client) {
+func parseVk(vk_ *easyvk.VK, mongoGroups_ *mgo.Collection, mongoUsers_ *mgo.Collection, redis_ *redis.Client) {
+	vk = vk_
+	mongoGroups = mongoGroups_
+	mongoUsers = mongoUsers_
+	redisVk = redis_
+
 	for {
 		fmt.Println("Loading groups list... ")
 		groupsList := loadGroups(os.Getenv("GROUPS_FILE"))
 
 		fmt.Println("Parsing groups' members...")
-		groups := getGroupsMembers(vk, redis, groupsList)
+		groups := getGroupsMembers(groupsList)
 		allUsers := make([]int, 0)
 		allUsersMarked := make(map[int]bool)
 		for _, group := range groups {
@@ -33,10 +41,10 @@ func parseUsersGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Cl
 				}
 			}
 		}
-		fmt.Println("Total users to parse:", len(allUsers))
+		fmt.Println("Total users to parseVk:", len(allUsers))
 
 		fmt.Println("Parsing users' groups...")
-		parseGroups(vk, collection, redis, allUsers)
+		parseGroups(allUsers)
 		fmt.Print("\n\n")
 	}
 }
@@ -54,7 +62,7 @@ func loadGroups(filename string) []string {
 	return lines
 }
 
-func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client, users []int) {
+func parseGroups(users []int) {
 	//C := pb.StartNew(len(users))
 	for i := 0; i < len(users); i += 25 {
 		var shrinkedUsers []User
@@ -70,7 +78,7 @@ func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client,
 			var toInsert = make([]interface{}, 0)
 			var toUpdate = make([]interface{}, 0)
 			for _, user := range shrinkedUsers {
-				if exists := redis.Exists(strconv.Itoa(user.UserId)).Val(); exists == 1 {
+				if exists := redisVk.Exists(strconv.Itoa(user.UserId)).Val(); exists == 1 {
 					toUpdate = append(toUpdate, bson.M{"user_id": user.UserId}, user)
 				} else {
 					toInsert = append(toInsert, user)
@@ -78,7 +86,7 @@ func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client,
 			}
 
 			if len(toInsert) > 0 {
-				bulkInsert := collection.Bulk()
+				bulkInsert := mongoGroups.Bulk()
 				bulkInsert.Unordered()
 				bulkInsert.Insert(toInsert...)
 				_, err := bulkInsert.Run()
@@ -86,12 +94,12 @@ func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client,
 					panic(err)
 				}
 				for _, user := range toInsert {
-					redis.Set(strconv.Itoa(user.(User).UserId), 1, 0)
+					redisVk.Set(strconv.Itoa(user.(User).UserId), 1, 0)
 				}
 			}
 
 			if len(toUpdate) > 0 {
-				bulkUpdate := collection.Bulk()
+				bulkUpdate := mongoGroups.Bulk()
 				bulkUpdate.Unordered()
 				bulkUpdate.Update(toUpdate...)
 				_, err := bulkUpdate.Run()
@@ -108,7 +116,7 @@ func parseGroups(vk *easyvk.VK, collection *mgo.Collection, redis *redis.Client,
 	//bar.Finish()
 }
 
-func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Group {
+func getGroupsMembers(groups []string) []Group {
 	var groupsData []map[string]interface{}
 
 	byteArray := vkRequestWrapper(vk, "groups.getById", map[string]string{
@@ -133,34 +141,44 @@ func getGroupsMembers(vk *easyvk.VK, redis *redis.Client, groups []string) []Gro
 	for i, resultGroup := range resultGroups {
 		membersForRedis := make([]interface{}, resultGroup.MembersCount)
 		for j := 0; j < resultGroup.MembersCount; j += 1000*25 {
-			var members [][]int
+			var members [][]VkUser
 
 			byteArray := vkRequestWrapper(vk, "execute", map[string]string{
 				"code": fmt.Sprintf("var members = [];\n"+
-					"var offset = %s;\n"+
+					"var offset = %d;\n"+
 					"var i = offset;\n"+
 					"while (i < offset + 25) {\n"+
-					"	members.push(API.groups.getMembers({\"group_id\": %s, \"count\": 1000, \"offset\": i*1000}).items);\n"+ // TODO: Add last_seen checking
+					"	members.push(API.groups.getMembers({" +
+					"		\"group_id\": %d, " +
+					"		\"count\": 1000, " +
+					"		\"offset\": i*1000," +
+					"		\"fields\": \"first_name,last_name,last_seen,sex,photo_200,photo_max,city,status\"" +
+					"	}).items);\n"+
 					"	i = i + 1;\n"+
 					"}\n"+
-					"return members;", strconv.Itoa(j/1000), strconv.Itoa(resultGroup.Id)),
+					"return members;", j/1000, resultGroup.Id),
 			}, 0)
 			json.Unmarshal(byteArray, &members)
 			for k, batch := range members {
-				for m, id := range batch {
-					resultGroups[i].Members[j+k*1000+m] = id
-					membersForRedis[j+k*1000+m] = strconv.Itoa(id)
+				for m, user := range batch {
+					if time.Now().Sub(time.Unix(int64(user.LastSeen.Time), 0)) >= time.Hour * 24 * 2 {
+						continue
+					}
+					resultGroups[i].Members[j+k*1000+m] = user.Id
+					membersForRedis[j+k*1000+m] = strconv.Itoa(user.Id)
+
+					mongoUsers.Insert(user)
 				}
 			}
 		}
 
 		redisKey := "public_" + strconv.Itoa(resultGroup.Id)
-		redis.Del(redisKey)
+		redisVk.Del(redisKey)
 		for k := 0; k < len(resultGroups[i].Members); k += MaxRedisBatch {
 			if k+MaxRedisBatch > len(membersForRedis) {
-				redis.SAdd(redisKey, membersForRedis[k:]...)
+				redisVk.SAdd(redisKey, membersForRedis[k:]...)
 			} else {
-				redis.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)
+				redisVk.SAdd(redisKey, membersForRedis[k:k+MaxRedisBatch]...)
 			}
 		}
 
@@ -183,11 +201,11 @@ func getUsersGroups(vk *easyvk.VK, ids []int) []User {
 		"code": fmt.Sprintf("var groups = [];\n"+
 			"var ids = \"%s\".split(\",\");\n"+
 			"var i = 0;\n"+
-			"while (i < %s) {\n"+
+			"while (i < %d) {\n"+
 			"	groups.push(API.groups.get({\"user_id\": ids[i], \"count\": 1000}).items);\n"+
 			"	i = i + 1;\n"+
 			"}\n"+
-			"return groups;", strings.Join(stringIds, ","), strconv.Itoa(len(ids))),
+			"return groups;", strings.Join(stringIds, ","), len(ids)),
 	}, 0)
 	json.Unmarshal(byteArray, &groups)
 

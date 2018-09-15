@@ -26,6 +26,21 @@ type Group struct {
 	Members      []int `bson:"members"`
 }
 
+type VkUser struct {
+	Id int `json:"id" bson:"id"`
+	FirstName string `json:"first_name" bson:"first_name"`
+	LastName string `json:"last_name" bson:"last_name"`
+	LastSeen struct {
+		Time int `json:"time" bson:"time"`
+		Platform int `json:"platform" bson:"platform"`
+	} `json:"last_seen" bson:"last_seen"`
+	Sex int `json:"sex" bson:"sex"`
+	Photo200 string `json:"photo_200" bson:"photo_200"`
+	PhotoMax string `json:"photo_max" bson:"photo_max"`
+	City int `json:"city" bson:"city"`
+	Status int `json:"status" bson:"status"`
+}
+
 var RPSLimiter = time.Tick(time.Second / VkRPS)
 var guard chan struct{}
 var wg sync.WaitGroup
@@ -37,7 +52,11 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	collection := mongo.DB("friendzone").C("groups")
+	mongoDB := mongo.DB("friendzone")
+
+	mongoGroups := mongoDB.C("groups")
+	mongoUsers := mongoDB.C("users")
+	monogoTargetGroups := mongoDB.C("targetGroups")
 
 	redisClient := redis.NewClient(&redis.Options{
 		Addr:     "localhost:6379",
@@ -48,7 +67,11 @@ func main() {
 	guard = make(chan struct{}, MaxGoroutines)
 	wg = sync.WaitGroup{}
 
-	parseUsersGroups(&vk, collection, redisClient)
+	wg.Add(1)
+	go parseVk(&vk, mongoGroups, mongoUsers, redisClient)
 
-	//parseUsers(&vk, collection, redisClient)
+	wg.Add(1)
+	go parseTargetGroups(monogoTargetGroups, redisClient)
+
+	wg.Wait()
 }
