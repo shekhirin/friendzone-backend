@@ -6,7 +6,9 @@ import (
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/go-redis/redis"
+	"log"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -47,12 +49,16 @@ var httpClient = http.Client{
 }
 var mongoTargetGroups *mgo.Collection
 var redisTargetGroups *redis.Client
+var loggerTargetGroups *log.Logger
 
 func parseTargetGroups(mongoTargetGroups_ *mgo.Collection, redisClient_ *redis.Client) {
 	mongoTargetGroups = mongoTargetGroups_
 	redisTargetGroups = redisClient_
+	loggerTargetGroups = log.New(os.Stdout, "[Target Groups]", log.Ldate|log.Ltime|log.Lshortfile)
+
 	for {
 		for category, id := range categories {
+			log.Println(fmt.Sprintf("[Target Groups] Parsing category \"%s\"", category))
 			offset := 0
 			for {
 				response, err := httpClient.Get(fmt.Sprintf(UrlTemplate, id, offset))

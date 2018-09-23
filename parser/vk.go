@@ -8,6 +8,7 @@ import (
 	"github.com/go-redis/redis"
 	"github.com/vorkytaka/easyvk-go/easyvk"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -18,18 +19,20 @@ var vk *easyvk.VK
 var mongoGroups *mgo.Collection
 var mongoUsers *mgo.Collection
 var redisVk *redis.Client
+var loggerVk *log.Logger
 
 func parseVk(vk_ *easyvk.VK, mongoGroups_ *mgo.Collection, mongoUsers_ *mgo.Collection, redis_ *redis.Client) {
 	vk = vk_
 	mongoGroups = mongoGroups_
 	mongoUsers = mongoUsers_
 	redisVk = redis_
+	loggerVk = log.New(os.Stdout, "[VK]", log.Ldate|log.Ltime|log.Lshortfile)
 
 	for {
-		fmt.Println("Loading groups list... ")
+		loggerVk.Println("Loading groups list... ")
 		groupsList := loadGroups(os.Getenv("GROUPS_FILE"))
 
-		fmt.Println("Parsing groups' members...")
+		loggerVk.Println("Parsing groups' members...")
 		groups := getGroupsMembers(groupsList)
 		allUsers := make([]int, 0)
 		allUsersMarked := make(map[int]bool)
@@ -41,11 +44,10 @@ func parseVk(vk_ *easyvk.VK, mongoGroups_ *mgo.Collection, mongoUsers_ *mgo.Coll
 				}
 			}
 		}
-		fmt.Println("Total users to parseVk:", len(allUsers))
+		loggerVk.Println("Total users to parseVk:", len(allUsers))
 
-		fmt.Println("Parsing users' groups...")
+		loggerVk.Println("Parsing users' groups...")
 		parseGroups(allUsers)
-		fmt.Print("\n\n")
 	}
 }
 

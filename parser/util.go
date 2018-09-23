@@ -7,7 +7,7 @@ import (
 
 func vkRequestWrapper(vk *easyvk.VK, method string, params map[string]string, retriesCount int) []byte {
 	if retriesCount > 0 {
-		fmt.Println(retriesCount, "retry...")
+		loggerVk.Println(retriesCount, "retry...")
 	}
 	<-RPSLimiter
 	res, err := vk.Request(method, params)
